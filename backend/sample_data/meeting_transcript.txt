@@ -1,0 +1,7 @@
+Reunión de análisis — 05/08/2026
+
+Analista: Para HU-1250 se propone agregar especialidad y ubicación en POST /api/prestadores/buscar.
+Desarrollo: El endpoint existente puede reutilizarse.
+QA: Debemos actualizar CP-1040.
+PM: Queda como decisión candidata utilizar el endpoint existente y no crear uno nuevo.
+Acción pendiente: validar la decisión con Arquitectura antes del cierre del sprint.

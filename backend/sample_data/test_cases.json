@@ -1,0 +1,14 @@
+[
+  {
+    "id": "CP-1023",
+    "title": "Búsqueda de prestadores",
+    "content": "Valida HU-1234 mediante GET /api/prestadores y POST /api/prestadores/buscar.",
+    "metadata": {"status": "Aprobado", "automated": false}
+  },
+  {
+    "id": "CP-1040",
+    "title": "Filtros de especialidad",
+    "content": "Valida HU-1250 y los filtros de POST /api/prestadores/buscar.",
+    "metadata": {"status": "Diseñado", "automated": false}
+  }
+]

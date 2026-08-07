@@ -1,0 +1,35 @@
+openapi: 3.0.3
+info:
+  title: Prestadores API
+  version: 1.4.0
+paths:
+  /api/prestadores:
+    get:
+      operationId: listarPrestadores
+      summary: Listar prestadores
+      tags: [Prestadores]
+      responses:
+        "200":
+          description: OK
+  /api/prestadores/buscar:
+    post:
+      operationId: buscarPrestadores
+      summary: Buscar prestadores con filtros
+      tags: [Prestadores]
+      responses:
+        "200":
+          description: OK
+  /api/prestadores/{cuit}:
+    get:
+      operationId: obtenerPrestador
+      summary: Obtener prestador por CUIT
+      tags: [Prestadores]
+      parameters:
+        - in: path
+          name: cuit
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
