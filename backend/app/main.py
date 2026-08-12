@@ -14,6 +14,10 @@ from .schemas import (
 )
 from .security import create_token, current_user, verify_password
 
+from .integrations.google_drive_mcp import (
+    GoogleDriveMCPClient,
+) 
+
 app = FastAPI(title=settings.app_name, version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -188,3 +192,38 @@ def session_log(user: dict = Depends(current_user)):
     for row in rows:
         row["details"] = json.loads(row.pop("details_json"))
     return rows
+
+@app.get("/api/mcp/drive/tools")
+async def drive_mcp_tools():
+
+    client = GoogleDriveMCPClient()
+
+    try:
+        tools = await client.list_tools()
+
+    except Exception as exc:
+
+        print("")
+        print("========== ERROR MCP ==========")
+        print("TIPO:", type(exc).__name__)
+        print("ERROR:", repr(exc))
+
+        if isinstance(exc, BaseExceptionGroup):
+            for i, sub in enumerate(exc.exceptions, start=1):
+                print(
+                    f"SUB-ERROR {i}:",
+                    type(sub).__name__,
+                    repr(sub),
+                )
+
+        print("===============================")
+        print("")
+
+        raise HTTPException(
+            status_code=400,
+            detail=repr(exc),
+        ) from exc 
+
+    return {
+        "tools": tools
+    } 

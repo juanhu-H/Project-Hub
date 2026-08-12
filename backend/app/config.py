@@ -25,6 +25,19 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
 
+    
+    google_application_credentials: str = ""
+    drive_folder_id: str = "" 
+
+    google_drive_mcp_enabled: bool = False
+
+    google_drive_mcp_url: str = (
+        "https://drivemcp.googleapis.com/mcp/v1"
+    )
+
+    google_drive_mcp_client_id: str = ""
+
+    google_drive_mcp_client_secret: str = "" 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
