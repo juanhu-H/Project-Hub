@@ -40,3 +40,10 @@ class FeedbackInput(BaseModel):
     target_id: str
     outcome: Literal["accepted", "rejected", "successful", "failed"]
     comment: str = ""
+
+
+class DriveToolCallInput(BaseModel):
+    """Solicitud validada para ejecutar una herramienta de Google Drive MCP."""
+
+    tool_name: str = Field(min_length=1, max_length=100)
+    arguments: dict[str, Any] = Field(default_factory=dict)

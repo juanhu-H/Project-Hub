@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Project Intelligence Hub"
     app_env: str = "local"
-    secret_key: str = "change-this-before-deploying"
+    secret_key: str = "replace-with-a-random-secret-of-at-least-32-characters"
     database_path: str = "./pih.db"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     demo_admin_email: str = "admin@pih.local"
     demo_admin_password: str = "admin123"

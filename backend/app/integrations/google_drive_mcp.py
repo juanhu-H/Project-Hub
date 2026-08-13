@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
+import httpx2
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -12,6 +16,31 @@ class GoogleDriveMCPClient:
 
     def __init__(self):
         self.server_url = settings.google_drive_mcp_url
+
+    def _http_client(self) -> httpx2.AsyncClient:
+        credentials_path = settings.google_application_credentials
+        if not credentials_path:
+            raise RuntimeError(
+                "Falta GOOGLE_APPLICATION_CREDENTIALS para autenticar Google Drive MCP."
+            )
+
+        credentials = service_account.Credentials.from_service_account_file(
+            credentials_path,
+            scopes=["https://www.googleapis.com/auth/drive"],
+        )
+        credentials.refresh(Request())
+        return httpx2.AsyncClient(
+            headers={"Authorization": f"Bearer {credentials.token}"}
+        )
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[tuple[Any, Any]]:
+        async with self._http_client() as http_client:
+            async with streamable_http_client(
+                self.server_url,
+                http_client=http_client,
+            ) as streams:
+                yield streams
 
     async def list_tools(
         self,
@@ -26,9 +55,7 @@ class GoogleDriveMCPClient:
             self.server_url,
         )
 
-        async with streamable_http_client(
-            self.server_url
-        ) as (
+        async with self._connection() as (
             read_stream,
             write_stream,
         ):
@@ -81,9 +108,7 @@ class GoogleDriveMCPClient:
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
 
-        async with streamable_http_client(
-            self.server_url
-        ) as (
+        async with self._connection() as (
             read_stream,
             write_stream,
         ):
@@ -154,8 +179,9 @@ class GoogleDriveMCPClient:
                         None,
                     )
 
-                return {
-                    "tool": tool_name,
-                    "text": text_output,
-                    "structured": structured,
-                }
+                    return {
+                        "tool": tool_name,
+                        "text": text_output,
+                        "structured": structured,
+                        "is_error": bool(getattr(result, "isError", False)),
+                    }

@@ -11,3 +11,5 @@ neo4j>=6,<7
 pytest>=8,<9
 mcp[cli]
 mcp
+google-auth>=2.0,<3
+requests>=2.0,<3

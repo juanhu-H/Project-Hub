@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .agents import CaptureAgent, ReportAgent, LearningAgent
@@ -10,7 +10,7 @@ from .db import db
 from .orchestrator import Orchestrator
 from .schemas import (
     FeedbackInput, LoginRequest, RelationDecision, SearchRequest,
-    TokenResponse, TranscriptInput
+    TokenResponse, TranscriptInput, DriveToolCallInput
 )
 from .security import create_token, current_user, verify_password
 
@@ -44,6 +44,16 @@ def get_project(user: dict) -> dict:
     if not project:
         raise HTTPException(status_code=403, detail="Usuario sin proyecto asignado")
     return project
+
+
+@app.get("/")
+def root():
+    return {"status": "ok", "app": settings.app_name, "docs": "/docs"}
+
+
+@app.get("/favicon.ico", include_in_schema=False, status_code=204)
+def favicon():
+    return Response(status_code=204)
 
 
 @app.get("/health")
@@ -105,6 +115,20 @@ async def ingest_jira(user: dict = Depends(current_user)):
     project = get_project(user)
     try:
         ids = await CaptureAgent(project["id"]).ingest_jira()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ingested": len(ids), "artifact_ids": ids}
+
+
+@app.post("/api/ingest/drive")
+async def ingest_drive_documents(user: dict = Depends(current_user)):
+    """Carga los documentos de la carpeta de Drive como artefactos del proyecto."""
+    ensure_google_drive_mcp_enabled()
+    project = get_project(user)
+    try:
+        ids = await CaptureAgent(project["id"]).ingest_drive_api_documents(
+            settings.drive_folder_id,
+        )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ingested": len(ids), "artifact_ids": ids}
@@ -193,8 +217,18 @@ def session_log(user: dict = Depends(current_user)):
         row["details"] = json.loads(row.pop("details_json"))
     return rows
 
+def ensure_google_drive_mcp_enabled() -> None:
+    if not settings.google_drive_mcp_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="La integración con Google Drive MCP no está habilitada.",
+        )
+
+
 @app.get("/api/mcp/drive/tools")
-async def drive_mcp_tools():
+async def drive_mcp_tools(user: dict = Depends(current_user)):
+    """Lista las acciones habilitadas por la cuenta autorizada de Google Drive."""
+    ensure_google_drive_mcp_enabled()
 
     client = GoogleDriveMCPClient()
 
@@ -226,4 +260,29 @@ async def drive_mcp_tools():
 
     return {
         "tools": tools
-    } 
+    }
+
+
+@app.post("/api/mcp/drive/call")
+async def drive_mcp_call(
+    payload: DriveToolCallInput,
+    user: dict = Depends(current_user),
+):
+    """Ejecuta una herramienta de Google Drive MCP con argumentos explícitos."""
+    ensure_google_drive_mcp_enabled()
+    client = GoogleDriveMCPClient()
+
+    try:
+        result = await client.call_tool(payload.tool_name, payload.arguments)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        print("[PIH MCP] Error al ejecutar Google Drive:", repr(exc))
+        raise HTTPException(status_code=502, detail="No se pudo ejecutar la operación en Google Drive.") from exc
+
+    db.log(
+        "google_drive_mcp_tool_called",
+        {"tool": payload.tool_name},
+        user_email=user["email"],
+    )
+    return result

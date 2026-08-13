@@ -127,6 +127,7 @@ function Dashboard({ token, user, logout }) {
         <div className="logo">PIH</div>
         <nav>
           <a className="active">Dashboard</a>
+          <a href="#drive">Google Drive</a>
           <a href="#search">Buscador</a>
           <a href="#relations">Relaciones pendientes</a>
           <a href="#report">Reporte diario</a>
@@ -157,6 +158,20 @@ function Dashboard({ token, user, logout }) {
               })}
             >
               {busy === "jira" ? "Sincronizando…" : "Sincronizar Jira"}
+            </button>
+            <button
+              id="drive"
+              className="secondary"
+              disabled={busy}
+              onClick={() => action("drive", async () => {
+                const result = await request("/api/ingest/drive", {
+                  method: "POST"
+                }, token);
+
+                return `${result.ingested} documentos sincronizados desde Google Drive.`;
+              })}
+            >
+              {busy === "drive" ? "Sincronizando…" : "Sincronizar Drive"}
             </button>
             <button
               disabled={busy}

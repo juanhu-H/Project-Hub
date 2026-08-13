@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
+*-api.json
+*-ac0f62d99167.json
+service-account*.json
 *.db
 node_modules/
 dist/

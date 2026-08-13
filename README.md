@@ -149,6 +149,36 @@ POST /api/ingest/jira
 
 El MVP usa Jira REST API como mecanismo principal. MCP queda como evolución futura.
 
+## Google Drive MCP
+
+El backend puede consultar y operar sobre los archivos a los que tenga acceso la
+cuenta de servicio configurada. Copie el JSON de la cuenta de servicio dentro de
+`backend/`, sin añadirlo a Git, y configure en `backend/.env`:
+
+```env
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+GOOGLE_DRIVE_MCP_ENABLED=true
+GOOGLE_DRIVE_MCP_URL=https://drivemcp.googleapis.com/mcp/v1
+```
+
+Los endpoints requieren el token de sesión de PIH:
+
+```http
+GET /api/mcp/drive/tools
+POST /api/mcp/drive/call
+Content-Type: application/json
+
+{
+  "tool_name": "list_recent_files",
+  "arguments": {"pageSize": 10, "excludeContentSnippets": true}
+}
+```
+
+Para archivos que pertenezcan a otra cuenta, comparta la carpeta o archivo con
+el correo de la cuenta de servicio. Las operaciones disponibles son las ocho
+herramientas que ofrece el servidor Drive MCP, incluidas buscar, leer, copiar y
+crear archivos.
+
 ## Neo4j opcional
 
 El sistema funciona con grafo local persistido en SQLite. Para sincronizar relaciones en Neo4j:

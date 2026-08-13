@@ -87,6 +87,131 @@ class CaptureAgent:
         return artifact_id
 
     # ==========================================================
+    # GOOGLE DRIVE MCP
+    # ==========================================================
+
+    async def ingest_drive_api_documents(
+        self,
+        folder_id: str,
+        page_size: int = 50,
+    ) -> list[int]:
+        """Carga documentos de Drive usando la cuenta de servicio del proyecto."""
+        from ..integrations.google_drive_api import GoogleDriveAPIClient
+
+        documents = GoogleDriveAPIClient().fetch_documents(folder_id, page_size)
+        ids = [
+            self.ingest_artifact(
+                artifact_type="document",
+                external_id=f"DRIVE-{document['id']}",
+                title=document["title"],
+                content=document["content"],
+                metadata={
+                    "drive_file_id": document["id"],
+                    "file_name": document["file_name"],
+                    "drive_url": (
+                        "https://drive.google.com/open?id="
+                        f"{document['id']}"
+                    ),
+                    "mime_type": document["mime_type"],
+                    "modified_time": document["modified_time"],
+                },
+                source="google-drive-api",
+            )
+            for document in documents
+        ]
+        db.log(
+            "google_drive_documents_synced",
+            {"documents_saved": len(ids), "folder_id": folder_id},
+            self.project_id,
+        )
+        return ids
+
+    async def ingest_google_drive_documents(
+        self,
+        folder_id: str,
+        page_size: int = 50,
+    ) -> list[int]:
+        """Reemplaza la fuente documental local por documentos disponibles en Drive."""
+        from ..integrations.google_drive_mcp import GoogleDriveMCPClient
+
+        if not folder_id:
+            raise ValueError("Falta DRIVE_FOLDER_ID en la configuración.")
+
+        client = GoogleDriveMCPClient()
+        listing = await client.call_tool(
+            "search_files",
+            {
+                "query": f"parentId = '{folder_id}'",
+                "pageSize": page_size,
+                "excludeContentSnippets": True,
+            },
+        )
+        if listing.get("is_error"):
+            raise RuntimeError(" ".join(listing["text"]) or "Drive rechazó la consulta.")
+
+        files = self._drive_files(listing)
+        if not files and listing.get("text"):
+            raise RuntimeError(" ".join(listing["text"]))
+
+        ids: list[int] = []
+        for file in files:
+            file_id = file.get("id")
+            mime_type = file.get("mimeType", "")
+            if not file_id or mime_type == "application/vnd.google-apps.folder":
+                continue
+
+            content_result = await client.call_tool(
+                "read_file_content",
+                {"fileId": file_id},
+            )
+            if content_result.get("is_error"):
+                continue
+
+            content = "\n".join(content_result.get("text", []))
+            if not content.strip():
+                continue
+
+            ids.append(self.ingest_artifact(
+                artifact_type="document",
+                external_id=f"DRIVE-{file_id}",
+                title=file.get("title") or file_id,
+                content=content,
+                metadata={"drive_file_id": file_id, "mime_type": mime_type},
+                source="google-drive-mcp",
+            ))
+
+        db.log(
+            "google_drive_documents_synced",
+            {"documents_saved": len(ids), "folder_id": folder_id},
+            self.project_id,
+        )
+        return ids
+
+    @staticmethod
+    def _drive_files(result: dict[str, Any]) -> list[dict[str, Any]]:
+        """Extrae objetos File de la respuesta MCP, sin depender de su envoltorio."""
+        values: list[dict[str, Any]] = []
+
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                if "id" in value and ("title" in value or "mimeType" in value):
+                    values.append(value)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(result.get("structured"))
+        if not values:
+            for text in result.get("text", []):
+                try:
+                    visit(json.loads(text))
+                except json.JSONDecodeError:
+                    continue
+        return values
+
+    # ==========================================================
     # SWAGGER / OPENAPI
     # ==========================================================
 
