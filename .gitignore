@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 .env
 *.db
+drive_mcp_token.json
+drive-api.json
 node_modules/
 dist/
 .vscode/

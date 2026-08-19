@@ -32,11 +32,13 @@ class ReportAgent:
         evidence = []
         related = []
         for artifact in selected:
+            metadata = json.loads(artifact["metadata_json"]) if artifact["metadata_json"] else {}
             evidence.append({
                 "type": artifact["artifact_type"],
                 "id": artifact["external_id"],
                 "title": artifact["title"],
                 "source": artifact["source"],
+                "link": metadata.get("link"),
             })
             rels = db.all("""
                 SELECT a.external_id, a.title, a.artifact_type, r.relation_type,

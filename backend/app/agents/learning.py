@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from ..db import db, utc_now
 
 
@@ -34,6 +35,36 @@ class LearningAgent:
             "comment": comment,
         }, self.project_id, user_email)
         return {"relation_id": relation_id, "status": decision}
+
+    def learn_from_evaluation(self, cycle_id: int, evaluation: dict) -> dict:
+        """
+        Incorpora el resultado del Agente Evaluador a la memoria organizacional
+        como una lección del ciclo. No modifica ningún modelo: solo registra
+        evidencia (qué recomendaciones funcionaron y cuáles siguen pendientes)
+        para que futuros ciclos y consultas puedan aprovecharla.
+        """
+        rate = evaluation.get("effectiveness_rate")
+        if rate is None:
+            outcome = "no_data"
+        elif rate >= 0.5:
+            outcome = "successful"
+        else:
+            outcome = "failed"
+
+        feedback_id = db.execute("""
+            INSERT INTO feedback(project_id, target_type, target_id, outcome,
+                                 comment, created_at)
+            VALUES (?, 'cycle_evaluation', ?, ?, ?, ?)
+        """, (
+            self.project_id, str(cycle_id), outcome,
+            json.dumps(evaluation, ensure_ascii=False), utc_now(),
+        ))
+        db.log("learning_recorded", {
+            "feedback_id": feedback_id,
+            "cycle_id": cycle_id,
+            "evaluation": evaluation,
+        }, self.project_id)
+        return {"feedback_id": feedback_id, "outcome": outcome}
 
     def feedback(self, target_type: str, target_id: str, outcome: str,
                  comment: str, user_email: str) -> dict:

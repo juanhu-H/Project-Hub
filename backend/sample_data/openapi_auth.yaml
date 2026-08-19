@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: PIH Auth API
+  version: 1.0.0
+  description: >
+    API de registro e inicio de sesión del Portal Prestadores — Demo.
+    Spec generado para vincular endpoints con las historias de Jira del
+    proyecto PIH (login/registro), no es un contrato productivo real.
+paths:
+  /api/auth/register:
+    post:
+      operationId: registrarUsuario
+      summary: Registrar nuevo usuario
+      tags: [Auth]
+      description: >
+        Crea una cuenta nueva con email, contraseña, nombre y apellido.
+        Implementa PIH-2 (Registro de nuevo usuario) y PIH-6 (Registro con
+        nombre y apellido). Corrige los defectos PIH-15 (acepta correos
+        inválidos en registro) y PIH-17 (hotfix de validación de email).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, nombre, apellido]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                nombre: { type: string }
+                apellido: { type: string }
+      responses:
+        "201":
+          description: Cuenta creada exitosamente
+        "409":
+          description: El email ya está registrado
+
+  /api/auth/validate-email:
+    post:
+      operationId: validarEmail
+      summary: Validar formato de correo electrónico
+      tags: [Auth]
+      description: >
+        Valida que el email cumpla el formato usuario@dominio antes de
+        habilitar el registro. Implementa PIH-3 (Validación de correo
+        electrónico). Corrige PIH-15 y PIH-17 (aceptaba correos inválidos).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          description: Email válido
+        "400":
+          description: Error de validación de formato
+
+  /api/auth/confirm-password:
+    post:
+      operationId: confirmarContrasena
+      summary: Confirmar contraseña en el registro
+      tags: [Auth]
+      description: >
+        Compara la contraseña ingresada contra su confirmación antes de
+        crear la cuenta. Implementa PIH-4 (Confirmación de contraseña).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, password_confirmation]
+              properties:
+                password: { type: string }
+                password_confirmation: { type: string }
+      responses:
+        "200":
+          description: Las contraseñas coinciden
+        "400":
+          description: Las contraseñas no coinciden
+
+  /api/auth/password-policy:
+    get:
+      operationId: obtenerPoliticaContrasena
+      summary: Obtener requisitos de contraseña
+      tags: [Auth]
+      description: >
+        Devuelve las reglas vigentes de contraseña (mínimo 8 caracteres,
+        etc.) para mostrarlas en el formulario de registro. Implementa
+        PIH-5 (Visualización de requisitos de contraseña).
+      responses:
+        "200":
+          description: Política de contraseña vigente
+
+  /api/auth/welcome-message:
+    get:
+      operationId: obtenerMensajeBienvenida
+      summary: Obtener mensaje de bienvenida post-registro
+      tags: [Auth]
+      description: >
+        Devuelve el mensaje de éxito mostrado luego de un registro exitoso.
+        Implementa PIH-7 (Mensaje de bienvenida).
+      responses:
+        "200":
+          description: Mensaje de bienvenida
+
+  /api/auth/login:
+    post:
+      operationId: iniciarSesion
+      summary: Iniciar sesión
+      tags: [Auth]
+      description: >
+        Autentica al usuario con email y contraseña. Implementa PIH-9
+        (Inicio de sesión exitoso). Corrige PIH-16 (login no informa
+        credenciales incorrectas) y PIH-18 (hotfix de pantalla congelada
+        en login).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                remember_me: { type: boolean }
+      responses:
+        "200":
+          description: Login exitoso, devuelve token de sesión
+        "401":
+          description: Credenciales incorrectas
+
+  /api/auth/login/remember-session:
+    post:
+      operationId: recordarSesion
+      summary: Mantener sesión iniciada
+      tags: [Auth]
+      description: >
+        Extiende la duración del token de sesión cuando el usuario marca
+        "Recordarme". Implementa PIH-10 (Recordar sesión).
+      responses:
+        "200":
+          description: Sesión extendida
+
+  /api/auth/password-reset:
+    post:
+      operationId: recuperarContrasena
+      summary: Recuperar contraseña olvidada
+      tags: [Auth]
+      description: >
+        Envía un email con un link para restablecer la contraseña.
+        Implementa PIH-11 (Recuperación de contraseña).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          description: Email de recuperación enviado
+
+  /api/auth/login/lock-check:
+    post:
+      operationId: verificarBloqueoLogin
+      summary: Verificar bloqueo por intentos fallidos
+      tags: [Auth]
+      description: >
+        Bloquea temporalmente el login luego de N intentos fallidos
+        consecutivos. Implementa PIH-12 (Bloqueo de intentos fallidos).
+      responses:
+        "200":
+          description: Cuenta habilitada para intentar login
+        "423":
+          description: Cuenta bloqueada temporalmente
+
+  /api/auth/logout:
+    post:
+      operationId: cerrarSesion
+      summary: Cerrar sesión
+      tags: [Auth]
+      description: >
+        Invalida el token de sesión activo y redirige al login. Implementa
+        PIH-14 (Cierre de sesión).
+      responses:
+        "204":
+          description: Sesión cerrada

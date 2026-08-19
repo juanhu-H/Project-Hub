@@ -1,16 +1,16 @@
 from __future__ import annotations
 import json
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agents import CaptureAgent, ReportAgent, LearningAgent
+from .agents import CaptureAgent, ReportAgent, LearningAgent, ImpactAgent
 from .bootstrap import bootstrap
 from .config import settings
 from .db import db
 from .orchestrator import Orchestrator
 from .schemas import (
     FeedbackInput, LoginRequest, RelationDecision, SearchRequest,
-    TokenResponse, TranscriptInput
+    SwaggerInput, TokenResponse, TranscriptInput
 )
 from .security import create_token, current_user, verify_password
 
@@ -31,6 +31,16 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     bootstrap()
+
+
+def _trigger_cycle(project_id: int):
+    """Dispara el ciclo agéntico completo en background luego de una captura
+    exitosa (nuevo evento de Jira, Drive o transcripción), sin bloquear la
+    respuesta HTTP de la ingesta que lo originó."""
+    try:
+        Orchestrator(project_id).run_cycle()
+    except Exception as exc:
+        print("[PIH] Ciclo automático disparado por evento falló:", str(exc))
 
 
 def get_project(user: dict) -> dict:
@@ -101,17 +111,45 @@ def dashboard(user: dict = Depends(current_user)):
 
 
 @app.post("/api/ingest/jira")
-async def ingest_jira(user: dict = Depends(current_user)):
+async def ingest_jira(background_tasks: BackgroundTasks, user: dict = Depends(current_user)):
     project = get_project(user)
     try:
         ids = await CaptureAgent(project["id"]).ingest_jira()
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ingested": len(ids), "artifact_ids": ids}
+    if ids:
+        background_tasks.add_task(_trigger_cycle, project["id"])
+    return {"ingested": len(ids), "artifact_ids": ids, "cycle_triggered": bool(ids)}
+
+
+@app.post("/api/ingest/drive")
+async def ingest_drive(background_tasks: BackgroundTasks, user: dict = Depends(current_user)):
+    project = get_project(user)
+    try:
+        ids = await CaptureAgent(project["id"]).ingest_drive_folder()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if ids:
+        background_tasks.add_task(_trigger_cycle, project["id"])
+    return {"ingested": len(ids), "artifact_ids": ids, "cycle_triggered": bool(ids)}
+
+
+@app.post("/api/ingest/swagger")
+def ingest_swagger(payload: SwaggerInput, background_tasks: BackgroundTasks,
+                    user: dict = Depends(current_user)):
+    project = get_project(user)
+    try:
+        ids = CaptureAgent(project["id"]).ingest_swagger(payload.raw, payload.source_name)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if ids:
+        background_tasks.add_task(_trigger_cycle, project["id"])
+    return {"ingested": len(ids), "artifact_ids": ids, "cycle_triggered": bool(ids)}
 
 
 @app.post("/api/ingest/transcript")
-def ingest_transcript(payload: TranscriptInput, user: dict = Depends(current_user)):
+def ingest_transcript(payload: TranscriptInput, background_tasks: BackgroundTasks,
+                       user: dict = Depends(current_user)):
     project = get_project(user)
     artifact_id = CaptureAgent(project["id"]).ingest_artifact(
         "transcript",
@@ -121,7 +159,8 @@ def ingest_transcript(payload: TranscriptInput, user: dict = Depends(current_use
         {"validation_required": True},
         "manual-transcript",
     )
-    return {"artifact_id": artifact_id}
+    background_tasks.add_task(_trigger_cycle, project["id"])
+    return {"artifact_id": artifact_id, "cycle_triggered": True}
 
 
 @app.post("/api/process/run")
@@ -136,6 +175,15 @@ def search(payload: SearchRequest, user: dict = Depends(current_user)):
     result = ReportAgent(project["id"]).search(payload.query)
     db.log("user_query", {"query": payload.query}, project["id"], user["email"])
     return result
+
+
+@app.get("/api/impact/{external_id}")
+def analyze_impact(external_id: str, user: dict = Depends(current_user)):
+    project = get_project(user)
+    try:
+        return ImpactAgent(project["id"]).analyze_change(external_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/relations/pending")

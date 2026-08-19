@@ -4,6 +4,19 @@ import "./styles.css";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+function stripExtension(name) {
+  return name ? name.replace(/\.[^./\\]+$/, "") : name;
+}
+
+const LINK_LABELS = {
+  jira: "Ver en Jira",
+  document: "Ver en Drive",
+  test: "Ver en Drive",
+  endpoint: "Ver spec",
+  transcript: "Ver origen",
+  decision: "Ver origen",
+};
+
 async function request(path, options = {}, token = "") {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -64,10 +77,11 @@ function Metric({ label, value, note }) {
 function Dashboard({ token, user, logout }) {
   const [dashboard, setDashboard] = useState(null);
   const [pending, setPending] = useState([]);
-  const [query, setQuery] = useState("¿Qué impacta la historia HU-1234?");
+  const [query, setQuery] = useState("");
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("info");
 
   async function refresh() {
     const [dash, relations] = await Promise.all([
@@ -78,16 +92,36 @@ function Dashboard({ token, user, logout }) {
     setPending(relations);
   }
 
-  useEffect(() => { refresh().catch((e) => setMessage(e.message)); }, []);
+  useEffect(() => {
+    refresh().catch((e) => { setMessage(e.message); setMessageType("error"); });
+  }, []);
 
   async function action(name, fn) {
-    setBusy(name); setMessage("");
+    setBusy(name); setMessage(""); setMessageType("info");
     try {
       const value = await fn();
-      setMessage(typeof value === "string" ? value : "Operación completada.");
+      const text = typeof value === "string" ? value : value?.text || "Operación completada.";
+      setMessage(text);
+      setMessageType("success");
       await refresh();
+
+      // El ciclo agéntico se dispara solo en background tras la ingesta:
+      // sin este refresco demorado, sus resultados (hallazgos, recomendaciones,
+      // evaluación) quedan invisibles hasta que alguien refresque a mano.
+      if (typeof value === "object" && value?.cycleTriggered) {
+        setMessage(`${text} Ciclo agéntico corriendo en segundo plano…`);
+        setTimeout(async () => {
+          try {
+            await refresh();
+            setMessage(`${text} Ciclo agéntico completado — memoria organizacional actualizada.`);
+          } catch {
+            // El refresco de dashboard ya muestra el error si vuelve a fallar.
+          }
+        }, 2200);
+      }
     } catch (e) {
       setMessage(e.message);
+      setMessageType("error");
     } finally {
       setBusy("");
     }
@@ -95,7 +129,12 @@ function Dashboard({ token, user, logout }) {
 
   async function search(e) {
     e.preventDefault();
-    setBusy("search");
+    if (query.trim().length < 3) {
+      setMessage("Escribí al menos 3 caracteres para buscar.");
+      setMessageType("error");
+      return;
+    }
+    setBusy("search"); setMessage("");
     try {
       setResult(await request("/api/search", {
         method: "POST",
@@ -103,6 +142,7 @@ function Dashboard({ token, user, logout }) {
       }, token));
     } catch (e) {
       setMessage(e.message);
+      setMessageType("error");
     } finally {
       setBusy("");
     }
@@ -153,28 +193,52 @@ function Dashboard({ token, user, logout }) {
                   method: "POST"
                 }, token);
 
-                return `${result.ingested} tickets sincronizados desde Jira.`;
+                return {
+                  text: `${result.ingested} tickets sincronizados desde Jira.`,
+                  cycleTriggered: result.cycle_triggered,
+                };
               })}
             >
               {busy === "jira" ? "Sincronizando…" : "Sincronizar Jira"}
             </button>
             <button
+              className="secondary"
               disabled={busy}
-              onClick={() => action("cycle", async () => {
-                await request("/api/process/run", { method: "POST" }, token);
-                return "Ciclo agéntico ejecutado.";
+              onClick={() => action("drive", async () => {
+                const result = await request("/api/ingest/drive", {
+                  method: "POST"
+                }, token);
+
+                return {
+                  text: `${result.ingested} documentos sincronizados desde Drive.`,
+                  cycleTriggered: result.cycle_triggered,
+                };
               })}
             >
-              {busy === "cycle" ? "Procesando…" : "Ejecutar ciclo"}
+              {busy === "drive" ? "Sincronizando…" : "Sincronizar Drive"}
+            </button>
+            <button
+              disabled={busy}
+              title="El ciclo ya se dispara solo después de cada sincronización. Usá esto para forzar una corrida sin ingerir datos nuevos."
+              onClick={() => action("cycle", async () => {
+                await request("/api/process/run", { method: "POST" }, token);
+                return "Ciclo agéntico ejecutado manualmente.";
+              })}
+            >
+              {busy === "cycle" ? "Procesando…" : "Forzar ciclo manual"}
             </button>
           </div>
         </header>
 
-        {message && <div className="notice">{message}</div>}
+        {message && <div className={`notice ${messageType}`}>{message}</div>}
 
         <form id="search" className="search" onSubmit={search}>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} />
-          <button disabled={busy === "search"}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="¿Qué impacta la historia HU-1234?"
+          />
+          <button disabled={busy === "search" || query.trim().length < 3}>
             {busy === "search" ? "Buscando…" : "Buscar"}
           </button>
         </form>
@@ -208,8 +272,23 @@ function Dashboard({ token, user, logout }) {
                 <ul className="evidence">
                   {result.evidence.map((item) => (
                     <li key={`${item.type}-${item.id}`}>
-                      <b>{item.id}</b> — {item.title}
-                      <small>{item.type} · {item.source}</small>
+                      {item.type === "document" ? (
+                        <>
+                          <b>{item.title}</b>
+                          <small>{stripExtension(item.title)}</small>
+                        </>
+                      ) : (
+                        <b>{item.id}</b>
+                      )}
+                      {item.type !== "document" && ` — ${item.title}`}
+                      <small>
+                        {item.link ? (
+                          <a href={item.link} target="_blank" rel="noreferrer">
+                            {LINK_LABELS[item.type] || item.type}
+                          </a>
+                        ) : item.type}
+                        {" · "}{item.source}
+                      </small>
                     </li>
                   ))}
                 </ul>
@@ -224,7 +303,11 @@ function Dashboard({ token, user, logout }) {
               <span>Artefactos: {Object.values(counts).reduce((a, b) => a + b, 0)}</span>
               <span>Relaciones pendientes: {dashboard?.daily_report?.pending_relations || 0}</span>
               <span>Recomendaciones: {Object.values(dashboard?.daily_report?.recommendations || {}).reduce((a, b) => a + b, 0)}</span>
-              <span>Último ciclo: {dashboard?.last_cycle?.status || "sin ejecutar"}</span>
+              <span>
+                Último ciclo: {dashboard?.last_cycle?.status || "sin ejecutar"}
+                {dashboard?.last_cycle?.finished_at &&
+                  ` — ${new Date(dashboard.last_cycle.finished_at).toLocaleString()}`}
+              </span>
             </div>
             <h3>Recomendaciones destacadas</h3>
             <ul className="recommendations">
@@ -250,6 +333,11 @@ function Dashboard({ token, user, logout }) {
             <span className="badge">{pending.length}</span>
           </div>
           {pending.length === 0 && <p className="muted">No hay relaciones pendientes.</p>}
+          {pending.length > 10 && (
+            <p className="muted">
+              Mostrando 10 de {pending.length} — aprobá o rechazá para ver las siguientes.
+            </p>
+          )}
           {pending.slice(0, 10).map((rel) => (
             <div className="relation" key={rel.id}>
               <div>

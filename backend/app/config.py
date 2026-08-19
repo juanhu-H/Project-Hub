@@ -27,7 +27,8 @@ class Settings(BaseSettings):
 
     
     google_application_credentials: str = ""
-    drive_folder_id: str = "" 
+    drive_folder_id: str = ""
+    drive_test_cases_folder_id: str = ""
 
     google_drive_mcp_enabled: bool = False
 
@@ -37,12 +38,22 @@ class Settings(BaseSettings):
 
     google_drive_mcp_client_id: str = ""
 
-    google_drive_mcp_client_secret: str = "" 
+    google_drive_mcp_client_secret: str = ""
+
+    google_drive_mcp_scopes: str = "https://www.googleapis.com/auth/drive.readonly"
+
+    google_drive_mcp_token_path: str = "./drive_mcp_token.json"
+
+    google_drive_mcp_redirect_port: int = 8765
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
     def allowed_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @property
+    def google_drive_mcp_scope_list(self) -> list[str]:
+        return [item.strip() for item in self.google_drive_mcp_scopes.split(",") if item.strip()]
 
 
 settings = Settings()

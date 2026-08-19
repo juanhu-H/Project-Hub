@@ -30,6 +30,11 @@ class TranscriptInput(BaseModel):
     content: str
 
 
+class SwaggerInput(BaseModel):
+    raw: str = Field(min_length=1)
+    source_name: str = "swagger"
+
+
 class RelationDecision(BaseModel):
     decision: Literal["approved", "rejected"]
     comment: str = ""
