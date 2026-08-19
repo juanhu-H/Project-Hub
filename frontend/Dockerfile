@@ -3,6 +3,10 @@ WORKDIR /app
 COPY package.json .
 RUN npm install
 COPY . .
+# Vite incrusta las variables VITE_* en el bundle en build-time, no en runtime:
+# hay que pasarla como build arg al crear la imagen (ver instrucciones de deploy).
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 FROM nginx:alpine
