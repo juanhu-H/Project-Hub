@@ -167,6 +167,7 @@ function Dashboard({ token, user, logout }) {
         <div className="logo">PIH</div>
         <nav>
           <a className="active">Dashboard</a>
+          <a href="#drive">Google Drive</a>
           <a href="#search">Buscador</a>
           <a href="#relations">Relaciones pendientes</a>
           <a href="#report">Reporte diario</a>

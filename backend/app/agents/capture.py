@@ -22,11 +22,15 @@ class CaptureAgent:
        - Sincronización estructurada de tickets.
        - Épicas, historias, bugs, hotfix y subtareas.
 
-    2. Atlassian Rovo MCP
+    2. Google Drive API v3 (OAuth2)
+       - Documentación funcional/técnica y casos de prueba de QA.
+       - Ver `..integrations.google_drive_mcp.GoogleDriveMCPClient`.
+
+    3. Atlassian Rovo MCP
        - Consultas complementarias sobre Jira/Confluence.
        - Utiliza OAuth mediante mcp-remote.
 
-    3. Swagger / OpenAPI
+    4. Swagger / OpenAPI
        - Extracción estructurada de endpoints.
     """
 
