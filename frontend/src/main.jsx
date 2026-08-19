@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -82,6 +82,7 @@ function Dashboard({ token, user, logout }) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("info");
+  const swaggerInputRef = useRef(null);
 
   async function refresh() {
     const [dash, relations] = await Promise.all([
@@ -146,6 +147,25 @@ function Dashboard({ token, user, logout }) {
     } finally {
       setBusy("");
     }
+  }
+
+  async function handleSwaggerFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo después
+    if (!file) return;
+
+    await action("swagger", async () => {
+      const raw = await file.text();
+      const result = await request("/api/ingest/swagger", {
+        method: "POST",
+        body: JSON.stringify({ raw, source_name: file.name }),
+      }, token);
+
+      return {
+        text: `${result.ingested} endpoints sincronizados desde ${file.name}.`,
+        cycleTriggered: result.cycle_triggered,
+      };
+    });
   }
 
   async function decide(id, decision) {
@@ -217,6 +237,21 @@ function Dashboard({ token, user, logout }) {
               })}
             >
               {busy === "drive" ? "Sincronizando…" : "Sincronizar Drive"}
+            </button>
+            <input
+              type="file"
+              accept=".yaml,.yml,.json"
+              ref={swaggerInputRef}
+              onChange={handleSwaggerFile}
+              style={{ display: "none" }}
+            />
+            <button
+              className="secondary"
+              disabled={busy}
+              title="Subí un archivo Swagger/OpenAPI (YAML o JSON) para cargar sus endpoints."
+              onClick={() => swaggerInputRef.current?.click()}
+            >
+              {busy === "swagger" ? "Sincronizando…" : "Sincronizar Swagger"}
             </button>
             <button
               disabled={busy}
